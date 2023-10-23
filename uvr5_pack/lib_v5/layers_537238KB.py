@@ -122,5 +122,4 @@ class ASPPModule(nn.Module):
         feat6 = self.conv6(x)
         feat7 = self.conv7(x)
         out = torch.cat((feat1, feat2, feat3, feat4, feat5, feat6, feat7), dim=1)
-        bottle = self.bottleneck(out)
-        return bottle
+        return self.bottleneck(out)

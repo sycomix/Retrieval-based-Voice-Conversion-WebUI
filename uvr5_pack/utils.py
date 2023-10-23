@@ -71,10 +71,7 @@ def inference(X_spec, device, model, aggressiveness, data):
 
     X_mag_pad = np.pad(X_mag_pre, ((0, 0), (0, 0), (pad_l, pad_r)), mode="constant")
 
-    if list(model.state_dict().values())[0].dtype == torch.float16:
-        is_half = True
-    else:
-        is_half = False
+    is_half = list(model.state_dict().values())[0].dtype == torch.float16
     pred = _execute(
         X_mag_pad, roi_size, n_window, device, model, aggressiveness, is_half
     )

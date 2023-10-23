@@ -11,8 +11,12 @@ now_dir = os.getcwd()
 sys.path.append(now_dir)
 tmp = os.path.join(now_dir, "TEMP")
 shutil.rmtree(tmp, ignore_errors=True)
-shutil.rmtree("%s/runtime/Lib/site-packages/infer_pack" % (now_dir), ignore_errors=True)
-shutil.rmtree("%s/runtime/Lib/site-packages/uvr5_pack" % (now_dir), ignore_errors=True)
+shutil.rmtree(
+    f"{now_dir}/runtime/Lib/site-packages/infer_pack", ignore_errors=True
+)
+shutil.rmtree(
+    f"{now_dir}/runtime/Lib/site-packages/uvr5_pack", ignore_errors=True
+)
 os.makedirs(tmp, exist_ok=True)
 os.makedirs(os.path.join(now_dir, "logs"), exist_ok=True)
 os.makedirs(os.path.join(now_dir, "weights"), exist_ok=True)
@@ -28,10 +32,8 @@ i18n.print()
 ngpu = torch.cuda.device_count()
 gpu_infos = []
 mem = []
-if (not torch.cuda.is_available()) or ngpu == 0:
-    if_gpu_ok = False
-else:
-    if_gpu_ok = False
+if_gpu_ok = False
+if torch.cuda.is_available() and ngpu != 0:
     for i in range(ngpu):
         gpu_name = torch.cuda.get_device_name(i)
         if (
@@ -63,7 +65,7 @@ else:
                     + 0.4
                 )
             )
-if if_gpu_ok == True and len(gpu_infos) > 0:
+if if_gpu_ok == True and gpu_infos:
     gpu_info = "\n".join(gpu_infos)
     default_batch_size = min(mem) // 2
 else:
@@ -112,29 +114,26 @@ def load_hubert():
     )
     hubert_model = models[0]
     hubert_model = hubert_model.to(config.device)
-    if config.is_half:
-        hubert_model = hubert_model.half()
-    else:
-        hubert_model = hubert_model.float()
+    hubert_model = hubert_model.half() if config.is_half else hubert_model.float()
     hubert_model.eval()
 
 
 weight_root = "weights"
 weight_uvr5_root = "uvr5_weights"
 index_root = "logs"
-names = []
-for name in os.listdir(weight_root):
-    if name.endswith(".pth"):
-        names.append(name)
+names = [name for name in os.listdir(weight_root) if name.endswith(".pth")]
 index_paths = []
 for root, dirs, files in os.walk(index_root, topdown=False):
-    for name in files:
-        if name.endswith(".index") and "trained" not in name:
-            index_paths.append("%s/%s" % (root, name))
-uvr5_names = []
-for name in os.listdir(weight_uvr5_root):
-    if name.endswith(".pth"):
-        uvr5_names.append(name.replace(".pth", ""))
+    index_paths.extend(
+        f"{root}/{name}"
+        for name in files
+        if name.endswith(".index") and "trained" not in name
+    )
+uvr5_names = [
+    name.replace(".pth", "")
+    for name in os.listdir(weight_uvr5_root)
+    if name.endswith(".pth")
+]
 
 
 def vc_single(
@@ -161,7 +160,7 @@ def vc_single(
         if audio_max > 1:
             audio /= audio_max
         times = [0, 0, 0]
-        if hubert_model == None:
+        if hubert_model is None:
             load_hubert()
         if_f0 = cpt.get("f0", 1)
         file_index = (
@@ -202,7 +201,7 @@ def vc_single(
         if resample_sr >= 16000 and tgt_sr != resample_sr:
             tgt_sr = resample_sr
         index_info = (
-            "Using index:%s." % file_index
+            f"Using index:{file_index}."
             if os.path.exists(file_index)
             else "Index not used."
         )
@@ -266,12 +265,10 @@ def vc_multi(
             if "Success" in info:
                 try:
                     tgt_sr, audio_opt = opt
-                    wavfile.write(
-                        "%s/%s" % (opt_root, os.path.basename(path)), tgt_sr, audio_opt
-                    )
+                    wavfile.write(f"{opt_root}/{os.path.basename(path)}", tgt_sr, audio_opt)
                 except:
                     info += traceback.format_exc()
-            infos.append("%s->%s" % (os.path.basename(path), info))
+            infos.append(f"{os.path.basename(path)}->{info}")
             yield "\n".join(infos)
         yield "\n".join(infos)
     except:
@@ -290,7 +287,7 @@ def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg):
         )
         pre_fun = _audio_pre_(
             agg=int(agg),
-            model_path=os.path.join(weight_uvr5_root, model_name + ".pth"),
+            model_path=os.path.join(weight_uvr5_root, f"{model_name}.pth"),
             device=config.device,
             is_half=config.is_half,
         )
@@ -315,21 +312,18 @@ def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg):
                 need_reformat = 1
                 traceback.print_exc()
             if need_reformat == 1:
-                tmp_path = "%s/%s.reformatted.wav" % (tmp, os.path.basename(inp_path))
+                tmp_path = f"{tmp}/{os.path.basename(inp_path)}.reformatted.wav"
                 os.system(
-                    "ffmpeg -i %s -vn -acodec pcm_s16le -ac 2 -ar 44100 %s -y"
-                    % (inp_path, tmp_path)
+                    f"ffmpeg -i {inp_path} -vn -acodec pcm_s16le -ac 2 -ar 44100 {tmp_path} -y"
                 )
                 inp_path = tmp_path
             try:
                 if done == 0:
                     pre_fun._path_audio_(inp_path, save_root_ins, save_root_vocal)
-                infos.append("%s->Success" % (os.path.basename(inp_path)))
+                infos.append(f"{os.path.basename(inp_path)}->Success")
                 yield "\n".join(infos)
             except:
-                infos.append(
-                    "%s->%s" % (os.path.basename(inp_path), traceback.format_exc())
-                )
+                infos.append(f"{os.path.basename(inp_path)}->{traceback.format_exc()}")
                 yield "\n".join(infos)
     except:
         infos.append(traceback.format_exc())
@@ -349,7 +343,7 @@ def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg):
 # 一个选项卡全局只能有一个音色
 def get_vc(sid):
     global n_spk, tgt_sr, net_g, vc, cpt, version
-    if sid == "" or sid == []:
+    if sid in ["", []]:
         global hubert_model
         if hubert_model != None:  # 考虑到轮询, 需要加个判断看是否 sid 是由有模型切换到无模型的
             print("clean_empty_cache")
@@ -379,8 +373,8 @@ def get_vc(sid):
                 torch.cuda.empty_cache()
             cpt = None
         return {"visible": False, "__type__": "update"}
-    person = "%s/%s" % (weight_root, sid)
-    print("loading %s" % person)
+    person = f"{weight_root}/{sid}"
+    print(f"loading {person}")
     cpt = torch.load(person, map_location="cpu")
     tgt_sr = cpt["config"][-1]
     cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
@@ -399,25 +393,21 @@ def get_vc(sid):
     del net_g.enc_q
     print(net_g.load_state_dict(cpt["weight"], strict=False))
     net_g.eval().to(config.device)
-    if config.is_half:
-        net_g = net_g.half()
-    else:
-        net_g = net_g.float()
+    net_g = net_g.half() if config.is_half else net_g.float()
     vc = VC(tgt_sr, config)
     n_spk = cpt["config"][-3]
     return {"visible": True, "maximum": n_spk, "__type__": "update"}
 
 
 def change_choices():
-    names = []
-    for name in os.listdir(weight_root):
-        if name.endswith(".pth"):
-            names.append(name)
+    names = [name for name in os.listdir(weight_root) if name.endswith(".pth")]
     index_paths = []
     for root, dirs, files in os.walk(index_root, topdown=False):
-        for name in files:
-            if name.endswith(".index") and "trained" not in name:
-                index_paths.append("%s/%s" % (root, name))
+        index_paths.extend(
+            f"{root}/{name}"
+            for name in files
+            if name.endswith(".index") and "trained" not in name
+        )
     return {"choices": sorted(names), "__type__": "update"}, {
         "choices": sorted(index_paths),
         "__type__": "update",
@@ -437,7 +427,7 @@ sr_dict = {
 
 def if_done(done, p):
     while 1:
-        if p.poll() == None:
+        if p.poll() is None:
             sleep(0.5)
         else:
             break
@@ -450,7 +440,7 @@ def if_done_multi(done, ps):
         # 只要有一个进程未结束都不停
         flag = 1
         for p in ps:
-            if p.poll() == None:
+            if p.poll() is None:
                 flag = 0
                 sleep(0.5)
                 break
@@ -461,15 +451,10 @@ def if_done_multi(done, ps):
 
 def preprocess_dataset(trainset_dir, exp_dir, sr, n_p):
     sr = sr_dict[sr]
-    os.makedirs("%s/logs/%s" % (now_dir, exp_dir), exist_ok=True)
-    f = open("%s/logs/%s/preprocess.log" % (now_dir, exp_dir), "w")
+    os.makedirs(f"{now_dir}/logs/{exp_dir}", exist_ok=True)
+    f = open(f"{now_dir}/logs/{exp_dir}/preprocess.log", "w")
     f.close()
-    cmd = (
-        config.python_cmd
-        + " trainset_preprocess_pipeline_print.py %s %s %s %s/logs/%s "
-        % (trainset_dir, sr, n_p, now_dir, exp_dir)
-        + str(config.noparallel)
-    )
+    cmd = f"{config.python_cmd} trainset_preprocess_pipeline_print.py {trainset_dir} {sr} {n_p} {now_dir}/logs/{exp_dir} {str(config.noparallel)}"
     print(cmd)
     p = Popen(cmd, shell=True)  # , stdin=PIPE, stdout=PIPE,stderr=PIPE,cwd=now_dir
     ###煞笔gr, popen read都非得全跑完了再一次性读取, 不用gr就正常读一句输出一句;只能额外弄出一个文本流定时读
@@ -482,12 +467,12 @@ def preprocess_dataset(trainset_dir, exp_dir, sr, n_p):
         ),
     ).start()
     while 1:
-        with open("%s/logs/%s/preprocess.log" % (now_dir, exp_dir), "r") as f:
+        with open(f"{now_dir}/logs/{exp_dir}/preprocess.log", "r") as f:
             yield (f.read())
         sleep(1)
         if done[0] == True:
             break
-    with open("%s/logs/%s/preprocess.log" % (now_dir, exp_dir), "r") as f:
+    with open(f"{now_dir}/logs/{exp_dir}/preprocess.log", "r") as f:
         log = f.read()
     print(log)
     yield log
@@ -496,16 +481,11 @@ def preprocess_dataset(trainset_dir, exp_dir, sr, n_p):
 # but2.click(extract_f0,[gpus6,np7,f0method8,if_f0_3,trainset_dir4],[info2])
 def extract_f0_feature(gpus, n_p, f0method, if_f0, exp_dir, version19):
     gpus = gpus.split("-")
-    os.makedirs("%s/logs/%s" % (now_dir, exp_dir), exist_ok=True)
-    f = open("%s/logs/%s/extract_f0_feature.log" % (now_dir, exp_dir), "w")
+    os.makedirs(f"{now_dir}/logs/{exp_dir}", exist_ok=True)
+    f = open(f"{now_dir}/logs/{exp_dir}/extract_f0_feature.log", "w")
     f.close()
     if if_f0:
-        cmd = config.python_cmd + " extract_f0_print.py %s/logs/%s %s %s" % (
-            now_dir,
-            exp_dir,
-            n_p,
-            f0method,
-        )
+        cmd = f"{config.python_cmd} extract_f0_print.py {now_dir}/logs/{exp_dir} {n_p} {f0method}"
         print(cmd)
         p = Popen(cmd, shell=True, cwd=now_dir)  # , stdin=PIPE, stdout=PIPE,stderr=PIPE
         ###煞笔gr, popen read都非得全跑完了再一次性读取, 不用gr就正常读一句输出一句;只能额外弄出一个文本流定时读
@@ -518,14 +498,12 @@ def extract_f0_feature(gpus, n_p, f0method, if_f0, exp_dir, version19):
             ),
         ).start()
         while 1:
-            with open(
-                "%s/logs/%s/extract_f0_feature.log" % (now_dir, exp_dir), "r"
-            ) as f:
+            with open(f"{now_dir}/logs/{exp_dir}/extract_f0_feature.log", "r") as f:
                 yield (f.read())
             sleep(1)
             if done[0] == True:
                 break
-        with open("%s/logs/%s/extract_f0_feature.log" % (now_dir, exp_dir), "r") as f:
+        with open(f"{now_dir}/logs/{exp_dir}/extract_f0_feature.log", "r") as f:
             log = f.read()
         print(log)
         yield log
@@ -540,19 +518,7 @@ def extract_f0_feature(gpus, n_p, f0method, if_f0, exp_dir, version19):
     leng = len(gpus)
     ps = []
     for idx, n_g in enumerate(gpus):
-        cmd = (
-            config.python_cmd
-            + " extract_feature_print.py %s %s %s %s %s/logs/%s %s"
-            % (
-                config.device,
-                leng,
-                idx,
-                n_g,
-                now_dir,
-                exp_dir,
-                version19,
-            )
-        )
+        cmd = f"{config.python_cmd} extract_feature_print.py {config.device} {leng} {idx} {n_g} {now_dir}/logs/{exp_dir} {version19}"
         print(cmd)
         p = Popen(
             cmd, shell=True, cwd=now_dir
@@ -568,29 +534,29 @@ def extract_f0_feature(gpus, n_p, f0method, if_f0, exp_dir, version19):
         ),
     ).start()
     while 1:
-        with open("%s/logs/%s/extract_f0_feature.log" % (now_dir, exp_dir), "r") as f:
+        with open(f"{now_dir}/logs/{exp_dir}/extract_f0_feature.log", "r") as f:
             yield (f.read())
         sleep(1)
         if done[0] == True:
             break
-    with open("%s/logs/%s/extract_f0_feature.log" % (now_dir, exp_dir), "r") as f:
+    with open(f"{now_dir}/logs/{exp_dir}/extract_f0_feature.log", "r") as f:
         log = f.read()
     print(log)
     yield log
 
 
 def change_sr2(sr2, if_f0_3, version19):
-    vis_v = True if sr2 == "40k" else False
+    vis_v = sr2 == "40k"
     if sr2 != "40k":
         version19 = "v1"
     path_str = "" if version19 == "v1" else "_v2"
     version_state = {"visible": vis_v, "__type__": "update"}
-    if vis_v == False:
+    if not vis_v:
         version_state["value"] = "v1"
     f0_str = "f0" if if_f0_3 else ""
     return (
-        "pretrained%s/%sG%s.pth" % (path_str, f0_str, sr2),
-        "pretrained%s/%sD%s.pth" % (path_str, f0_str, sr2),
+        f"pretrained{path_str}/{f0_str}G{sr2}.pth",
+        f"pretrained{path_str}/{f0_str}D{sr2}.pth",
         version_state,
     )
 
@@ -598,11 +564,10 @@ def change_sr2(sr2, if_f0_3, version19):
 def change_version19(sr2, if_f0_3, version19):
     path_str = "" if version19 == "v1" else "_v2"
     f0_str = "f0" if if_f0_3 else ""
-    return "pretrained%s/%sG%s.pth" % (
-        path_str,
-        f0_str,
-        sr2,
-    ), "pretrained%s/%sD%s.pth" % (path_str, f0_str, sr2)
+    return (
+        f"pretrained{path_str}/{f0_str}G{sr2}.pth",
+        f"pretrained{path_str}/{f0_str}D{sr2}.pth",
+    )
 
 
 def change_f0(if_f0_3, sr2, version19):  # f0method8,pretrained_G14,pretrained_D15
@@ -610,13 +575,13 @@ def change_f0(if_f0_3, sr2, version19):  # f0method8,pretrained_G14,pretrained_D
     if if_f0_3:
         return (
             {"visible": True, "__type__": "update"},
-            "pretrained%s/f0G%s.pth" % (path_str, sr2),
-            "pretrained%s/f0D%s.pth" % (path_str, sr2),
+            f"pretrained{path_str}/f0G{sr2}.pth",
+            f"pretrained{path_str}/f0D{sr2}.pth",
         )
     return (
         {"visible": False, "__type__": "update"},
-        "pretrained%s/G%s.pth" % (path_str, sr2),
-        "pretrained%s/D%s.pth" % (path_str, sr2),
+        f"pretrained{path_str}/G{sr2}.pth",
+        f"pretrained{path_str}/D{sr2}.pth",
     )
 
 
@@ -638,27 +603,28 @@ def click_train(
     version19,
 ):
     # 生成filelist
-    exp_dir = "%s/logs/%s" % (now_dir, exp_dir1)
+    exp_dir = f"{now_dir}/logs/{exp_dir1}"
     os.makedirs(exp_dir, exist_ok=True)
-    gt_wavs_dir = "%s/0_gt_wavs" % (exp_dir)
+    gt_wavs_dir = f"{exp_dir}/0_gt_wavs"
     feature_dir = (
-        "%s/3_feature256" % (exp_dir)
+        f"{exp_dir}/3_feature256"
         if version19 == "v1"
-        else "%s/3_feature768" % (exp_dir)
+        else f"{exp_dir}/3_feature768"
     )
     if if_f0_3:
-        f0_dir = "%s/2a_f0" % (exp_dir)
-        f0nsf_dir = "%s/2b-f0nsf" % (exp_dir)
+        f0_dir = f"{exp_dir}/2a_f0"
+        f0nsf_dir = f"{exp_dir}/2b-f0nsf"
         names = (
-            set([name.split(".")[0] for name in os.listdir(gt_wavs_dir)])
-            & set([name.split(".")[0] for name in os.listdir(feature_dir)])
-            & set([name.split(".")[0] for name in os.listdir(f0_dir)])
-            & set([name.split(".")[0] for name in os.listdir(f0nsf_dir)])
-        )
+            (
+                {name.split(".")[0] for name in os.listdir(gt_wavs_dir)}
+                & {name.split(".")[0] for name in os.listdir(feature_dir)}
+            )
+            & {name.split(".")[0] for name in os.listdir(f0_dir)}
+        ) & {name.split(".")[0] for name in os.listdir(f0nsf_dir)}
     else:
-        names = set([name.split(".")[0] for name in os.listdir(gt_wavs_dir)]) & set(
-            [name.split(".")[0] for name in os.listdir(feature_dir)]
-        )
+        names = {name.split(".")[0] for name in os.listdir(gt_wavs_dir)} & {
+            name.split(".")[0] for name in os.listdir(feature_dir)
+        }
     opt = []
     for name in names:
         if if_f0_3:
@@ -688,64 +654,26 @@ def click_train(
                 )
             )
     fea_dim = 256 if version19 == "v1" else 768
-    if if_f0_3:
-        for _ in range(2):
+    for _ in range(2):
+        if if_f0_3:
             opt.append(
-                "%s/logs/mute/0_gt_wavs/mute%s.wav|%s/logs/mute/3_feature%s/mute.npy|%s/logs/mute/2a_f0/mute.wav.npy|%s/logs/mute/2b-f0nsf/mute.wav.npy|%s"
-                % (now_dir, sr2, now_dir, fea_dim, now_dir, now_dir, spk_id5)
+                f"{now_dir}/logs/mute/0_gt_wavs/mute{sr2}.wav|{now_dir}/logs/mute/3_feature{fea_dim}/mute.npy|{now_dir}/logs/mute/2a_f0/mute.wav.npy|{now_dir}/logs/mute/2b-f0nsf/mute.wav.npy|{spk_id5}"
             )
-    else:
-        for _ in range(2):
+        else:
             opt.append(
-                "%s/logs/mute/0_gt_wavs/mute%s.wav|%s/logs/mute/3_feature%s/mute.npy|%s"
-                % (now_dir, sr2, now_dir, fea_dim, spk_id5)
+                f"{now_dir}/logs/mute/0_gt_wavs/mute{sr2}.wav|{now_dir}/logs/mute/3_feature{fea_dim}/mute.npy|{spk_id5}"
             )
     shuffle(opt)
-    with open("%s/filelist.txt" % exp_dir, "w") as f:
+    with open(f"{exp_dir}/filelist.txt", "w") as f:
         f.write("\n".join(opt))
     print("write filelist done")
     # 生成config#无需生成config
     # cmd = python_cmd + " train_nsf_sim_cache_sid_load_pretrain.py -e mi-test -sr 40k -f0 1 -bs 4 -g 0 -te 10 -se 5 -pg pretrained/f0G40k.pth -pd pretrained/f0D40k.pth -l 1 -c 0"
     print("use gpus:", gpus16)
     if gpus16:
-        cmd = (
-            config.python_cmd
-            + " train_nsf_sim_cache_sid_load_pretrain.py -e %s -sr %s -f0 %s -bs %s -g %s -te %s -se %s -pg %s -pd %s -l %s -c %s -sw %s -v %s"
-            % (
-                exp_dir1,
-                sr2,
-                1 if if_f0_3 else 0,
-                batch_size12,
-                gpus16,
-                total_epoch11,
-                save_epoch10,
-                pretrained_G14,
-                pretrained_D15,
-                1 if if_save_latest13 == i18n("是") else 0,
-                1 if if_cache_gpu17 == i18n("是") else 0,
-                1 if if_save_every_weights18 == i18n("是") else 0,
-                version19,
-            )
-        )
+        cmd = f'{config.python_cmd} train_nsf_sim_cache_sid_load_pretrain.py -e {exp_dir1} -sr {sr2} -f0 {1 if if_f0_3 else 0} -bs {batch_size12} -g {gpus16} -te {total_epoch11} -se {save_epoch10} -pg {pretrained_G14} -pd {pretrained_D15} -l {1 if if_save_latest13 == i18n("是") else 0} -c {1 if if_cache_gpu17 == i18n("是") else 0} -sw {1 if if_save_every_weights18 == i18n("是") else 0} -v {version19}'
     else:
-        cmd = (
-            config.python_cmd
-            + " train_nsf_sim_cache_sid_load_pretrain.py -e %s -sr %s -f0 %s -bs %s -te %s -se %s -pg %s -pd %s -l %s -c %s -sw %s -v %s"
-            % (
-                exp_dir1,
-                sr2,
-                1 if if_f0_3 else 0,
-                batch_size12,
-                total_epoch11,
-                save_epoch10,
-                pretrained_G14,
-                pretrained_D15,
-                1 if if_save_latest13 == i18n("是") else 0,
-                1 if if_cache_gpu17 == i18n("是") else 0,
-                1 if if_save_every_weights18 == i18n("是") else 0,
-                version19,
-            )
-        )
+        cmd = f'{config.python_cmd} train_nsf_sim_cache_sid_load_pretrain.py -e {exp_dir1} -sr {sr2} -f0 {1 if if_f0_3 else 0} -bs {batch_size12} -te {total_epoch11} -se {save_epoch10} -pg {pretrained_G14} -pd {pretrained_D15} -l {1 if if_save_latest13 == i18n("是") else 0} -c {1 if if_cache_gpu17 == i18n("是") else 0} -sw {1 if if_save_every_weights18 == i18n("是") else 0} -v {version19}'
     print(cmd)
     p = Popen(cmd, shell=True, cwd=now_dir)
     p.wait()

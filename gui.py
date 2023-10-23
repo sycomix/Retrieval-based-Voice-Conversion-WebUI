@@ -64,17 +64,14 @@ class RVC:
                 print("index search enabled")
             self.index_rate = index_rate
             model_path = hubert_path
-            print("load model(s) from {}".format(model_path))
+            print(f"load model(s) from {model_path}")
             models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task(
                 [model_path],
                 suffix="",
             )
             self.model = models[0]
             self.model = self.model.to(device)
-            if Config.is_half:
-                self.model = self.model.half()
-            else:
-                self.model = self.model.float()
+            self.model = self.model.half() if Config.is_half else self.model.float()
             self.model.eval()
             cpt = torch.load(pth_path, map_location="cpu")
             self.tgt_sr = cpt["config"][-1]
@@ -98,15 +95,11 @@ class RVC:
             del self.net_g.enc_q
             print(self.net_g.load_state_dict(cpt["weight"], strict=False))
             self.net_g.eval().to(device)
-            if Config.is_half:
-                self.net_g = self.net_g.half()
-            else:
-                self.net_g = self.net_g.float()
+            self.net_g = self.net_g.half() if Config.is_half else self.net_g.float()
         except:
             print(traceback.format_exc())
 
     def get_f0(self, x, f0_up_key, inp_f0=None):
-        x_pad = 1
         f0_min = 50
         f0_max = 1100
         f0_mel_min = 1127 * np.log(1 + f0_min / 700)
@@ -130,6 +123,7 @@ class RVC:
             replace_f0 = np.interp(
                 list(range(delta_t)), inp_f0[:, 0] * 100, inp_f0[:, 1]
             )
+            x_pad = 1
             shape = f0[x_pad * tf0 : x_pad * tf0 + len(replace_f0)].shape[0]
             f0[x_pad * tf0 : x_pad * tf0 + len(replace_f0)] = replace_f0[:shape]
         # with open("test_opt.txt","w")as f:f.write("\n".join([str(i)for i in f0.tolist()]))
@@ -395,8 +389,8 @@ class GUI:
                 exit()
             if event == "start_vc" and self.flag_vc == False:
                 self.set_values(values)
-                print(str(self.config.__dict__))
-                print("using_cuda:" + str(torch.cuda.is_available()))
+                print(self.config.__dict__)
+                print(f"using_cuda:{str(torch.cuda.is_available())}")
                 self.start_vc()
             if event == "stop_vc" and self.flag_vc == True:
                 self.flag_vc = False
@@ -501,14 +495,14 @@ class GUI:
         self.input_wav[:] = np.append(self.input_wav[self.block_frame :], indata)
 
         # infer
-        print("input_wav:" + str(self.input_wav.shape))
+        print(f"input_wav:{str(self.input_wav.shape)}")
         # print('infered_wav:'+str(infer_wav.shape))
         infer_wav: torch.Tensor = self.resampler2(
             self.rvc.infer(self.resampler1(torch.from_numpy(self.input_wav)))
         )[-self.crossfade_frame - self.sola_search_frame - self.block_frame :].to(
             device
         )
-        print("infer_wav:" + str(infer_wav.shape))
+        print(f"infer_wav:{str(infer_wav.shape)}")
 
         # SOLA algorithm from https://github.com/yxlllc/DDSP-SVC
         cor_nom = F.conv1d(
@@ -524,7 +518,7 @@ class GUI:
             + 1e-8
         )
         sola_offset = torch.argmax(cor_nom[0, 0] / cor_den[0, 0])
-        print("sola offset: " + str(int(sola_offset)))
+        print(f"sola offset: {int(sola_offset)}")
 
         # crossfade
         self.output_wav[:] = infer_wav[sola_offset : sola_offset + self.block_frame]
@@ -556,7 +550,7 @@ class GUI:
             outdata[:] = self.output_wav[:].repeat(2, 1).t().cpu().numpy()
         total_time = time.perf_counter() - start_time
         self.window["infer_time"].update(int(total_time * 1000))
-        print("infer time:" + str(total_time))
+        print(f"infer time:{str(total_time)}")
 
     def get_devices(self, update: bool = True):
         """获取设备列表"""
@@ -603,8 +597,8 @@ class GUI:
         sd.default.device[1] = output_device_indices[
             output_devices.index(output_device)
         ]
-        print("input device:" + str(sd.default.device[0]) + ":" + str(input_device))
-        print("output device:" + str(sd.default.device[1]) + ":" + str(output_device))
+        print(f"input device:{str(sd.default.device[0])}:{str(input_device)}")
+        print(f"output device:{str(sd.default.device[1])}:{str(output_device)}")
 
 
 gui = GUI()

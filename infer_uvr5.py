@@ -33,14 +33,16 @@ class _audio_pre_:
             123812,
             537238,  # custom
         ]
-        self.nn_architecture = list("{}KB".format(s) for s in nn_arch_sizes)
+        self.nn_architecture = [f"{s}KB" for s in nn_arch_sizes]
         model_size = math.ceil(os.stat(model_path).st_size / 1024)
         nn_architecture = "{}KB".format(
             min(nn_arch_sizes, key=lambda x: abs(x - model_size))
         )
         nets = importlib.import_module(
-            "uvr5_pack.lib_v5.nets"
-            + f"_{nn_architecture}".replace("_{}KB".format(nn_arch_sizes[0]), ""),
+            (
+                "uvr5_pack.lib_v5.nets"
+                + f"_{nn_architecture}".replace(f"_{nn_arch_sizes[0]}KB", "")
+            ),
             package=None,
         )
         model_hash = hashlib.md5(open(model_path, "rb").read()).hexdigest()
@@ -51,11 +53,7 @@ class _audio_pre_:
         cpk = torch.load(model_path, map_location="cpu")
         model.load_state_dict(cpk)
         model.eval()
-        if is_half:
-            model = model.half().to(device)
-        else:
-            model = model.to(device)
-
+        model = model.half().to(device) if is_half else model.to(device)
         self.mp = mp
         self.model = model
 
@@ -137,14 +135,14 @@ class _audio_pre_:
                 )
             else:
                 wav_instrument = spec_utils.cmb_spectrogram_to_wave(y_spec_m, self.mp)
-            print("%s instruments done" % name)
+            print(f"{name} instruments done")
             wavfile.write(
                 os.path.join(
-                    ins_root, "instrument_{}_{}.wav".format(name, self.data["agg"])
+                    ins_root, f'instrument_{name}_{self.data["agg"]}.wav'
                 ),
                 self.mp.param["sr"],
                 (np.array(wav_instrument) * 32768).astype("int16"),
-            )  #
+            )
         if vocal_root is not None:
             if self.data["high_end_process"].startswith("mirroring"):
                 input_high_end_ = spec_utils.mirroring(
@@ -155,11 +153,9 @@ class _audio_pre_:
                 )
             else:
                 wav_vocals = spec_utils.cmb_spectrogram_to_wave(v_spec_m, self.mp)
-            print("%s vocals done" % name)
+            print(f"{name} vocals done")
             wavfile.write(
-                os.path.join(
-                    vocal_root, "vocal_{}_{}.wav".format(name, self.data["agg"])
-                ),
+                os.path.join(vocal_root, f'vocal_{name}_{self.data["agg"]}.wav'),
                 self.mp.param["sr"],
                 (np.array(wav_vocals) * 32768).astype("int16"),
             )

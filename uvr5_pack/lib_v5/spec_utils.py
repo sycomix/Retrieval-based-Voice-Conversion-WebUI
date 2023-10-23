@@ -42,9 +42,7 @@ def wave_to_spectrogram(
     spec_left = librosa.stft(wave_left, n_fft, hop_length=hop_length)
     spec_right = librosa.stft(wave_right, n_fft, hop_length=hop_length)
 
-    spec = np.asfortranarray([spec_left, spec_right])
-
-    return spec
+    return np.asfortranarray([spec_left, spec_right])
 
 
 def wave_to_spectrogram_mt(
@@ -83,7 +81,7 @@ def wave_to_spectrogram_mt(
 
 
 def combine_spectrograms(specs, mp):
-    l = min([specs[i].shape[2] for i in specs])
+    l = min(specs[i].shape[2] for i in specs)
     spec_c = np.zeros(shape=(2, mp.param["bins"] + 1, l), dtype=np.complex64)
     offset = 0
     bands_n = len(mp.param["band"])
@@ -98,10 +96,9 @@ def combine_spectrograms(specs, mp):
     if offset > mp.param["bins"]:
         raise ValueError("Too much bins")
 
-    # lowpass fiter
     if (
         mp.param["pre_filter_start"] > 0
-    ):  # and mp.param['band'][bands_n]['res_type'] in ['scipy', 'polyphase']:
+    ):
         if bands_n == 1:
             spec_c = fft_lp_filter(
                 spec_c, mp.param["pre_filter_start"], mp.param["pre_filter_stop"]
@@ -122,17 +119,10 @@ def combine_spectrograms(specs, mp):
 
 def spectrogram_to_image(spec, mode="magnitude"):
     if mode == "magnitude":
-        if np.iscomplexobj(spec):
-            y = np.abs(spec)
-        else:
-            y = spec
+        y = np.abs(spec) if np.iscomplexobj(spec) else spec
         y = np.log10(y**2 + 1e-8)
     elif mode == "phase":
-        if np.iscomplexobj(spec):
-            y = np.angle(spec)
-        else:
-            y = spec
-
+        y = np.angle(spec) if np.iscomplexobj(spec) else spec
     y -= y.min()
     y *= 255 / y.max()
     img = np.uint8(y)
@@ -212,8 +202,8 @@ def cache_or_load(mix_path, inst_path, mp):
     os.makedirs(mix_cache_dir, exist_ok=True)
     os.makedirs(inst_cache_dir, exist_ok=True)
 
-    mix_cache_path = os.path.join(mix_cache_dir, mix_basename + ".npy")
-    inst_cache_path = os.path.join(inst_cache_dir, inst_basename + ".npy")
+    mix_cache_path = os.path.join(mix_cache_dir, f"{mix_basename}.npy")
+    inst_cache_path = os.path.join(inst_cache_dir, f"{inst_basename}.npy")
 
     if os.path.exists(mix_cache_path) and os.path.exists(inst_cache_path):
         X_spec_m = np.load(mix_cache_path)
@@ -274,7 +264,7 @@ def cache_or_load(mix_path, inst_path, mp):
         y_spec_m = combine_spectrograms(y_spec_s, mp)
 
         if X_spec_m.shape != y_spec_m.shape:
-            raise ValueError("The combined spectrograms are different: " + mix_path)
+            raise ValueError(f"The combined spectrograms are different: {mix_path}")
 
         _, ext = os.path.splitext(mix_path)
 
@@ -443,7 +433,7 @@ def fft_hp_filter(spec, bin_start, bin_stop):
 
 
 def mirroring(a, spec_m, input_high_end, mp):
-    if "mirroring" == a:
+    if a == "mirroring":
         mirror = np.flip(
             np.abs(
                 spec_m[
@@ -463,7 +453,7 @@ def mirroring(a, spec_m, input_high_end, mp):
             np.abs(input_high_end) <= np.abs(mirror), input_high_end, mirror
         )
 
-    if "mirroring2" == a:
+    if a == "mirroring2":
         mirror = np.flip(
             np.abs(
                 spec_m[
@@ -491,9 +481,9 @@ def ensembling(a, specs):
         spec = spec[:, :, :ln]
         specs[i] = specs[i][:, :, :ln]
 
-        if "min_mag" == a:
+        if a == "min_mag":
             spec = np.where(np.abs(specs[i]) <= np.abs(spec), specs[i], spec)
-        if "max_mag" == a:
+        if a == "max_mag":
             spec = np.where(np.abs(specs[i]) >= np.abs(spec), specs[i], spec)
 
     return spec
@@ -504,9 +494,7 @@ def stft(wave, nfft, hl):
     wave_right = np.asfortranarray(wave[1])
     spec_left = librosa.stft(wave_left, nfft, hop_length=hl)
     spec_right = librosa.stft(wave_right, nfft, hop_length=hl)
-    spec = np.asfortranarray([spec_left, spec_right])
-
-    return spec
+    return np.asfortranarray([spec_left, spec_right])
 
 
 def istft(spec, hl):
@@ -597,7 +585,7 @@ if __name__ == "__main__":
         d_spec = np.where(np.abs(specs[0]) <= np.abs(spec[1]), specs[0], spec[1])
         v_spec = d_spec - specs[1]
         sf.write(
-            os.path.join("{}.wav".format(args.output_name)),
+            os.path.join(f"{args.output_name}.wav"),
             cmb_spectrogram_to_wave(v_spec, mp),
             mp.param["sr"],
         )
@@ -607,7 +595,7 @@ if __name__ == "__main__":
         specs[0] = specs[0][:, :, :ln]
         specs[1] = specs[1][:, :, :ln]
 
-        if "invert_p" == args.algorithm:
+        if args.algorithm == "invert_p":
             X_mag = np.abs(specs[0])
             y_mag = np.abs(specs[1])
             max_mag = np.where(X_mag >= y_mag, X_mag, y_mag)
@@ -625,40 +613,36 @@ if __name__ == "__main__":
                 y_image = spectrogram_to_image(y_mag)
                 v_image = spectrogram_to_image(v_mag)
 
-                cv2.imwrite("{}_X.png".format(args.output_name), X_image)
-                cv2.imwrite("{}_y.png".format(args.output_name), y_image)
-                cv2.imwrite("{}_v.png".format(args.output_name), v_image)
+                cv2.imwrite(f"{args.output_name}_X.png", X_image)
+                cv2.imwrite(f"{args.output_name}_y.png", y_image)
+                cv2.imwrite(f"{args.output_name}_v.png", v_image)
 
                 sf.write(
-                    "{}_X.wav".format(args.output_name),
+                    f"{args.output_name}_X.wav",
                     cmb_spectrogram_to_wave(specs[0], mp),
                     mp.param["sr"],
                 )
                 sf.write(
-                    "{}_y.wav".format(args.output_name),
+                    f"{args.output_name}_y.wav",
                     cmb_spectrogram_to_wave(specs[1], mp),
                     mp.param["sr"],
                 )
 
         sf.write(
-            "{}_v.wav".format(args.output_name),
+            f"{args.output_name}_v.wav",
             cmb_spectrogram_to_wave(v_spec, mp),
             mp.param["sr"],
         )
-    else:
-        if not args.algorithm == "deep":
-            sf.write(
-                os.path.join("ensembled", "{}.wav".format(args.output_name)),
-                cmb_spectrogram_to_wave(ensembling(args.algorithm, specs), mp),
-                mp.param["sr"],
-            )
+    elif args.algorithm != "deep":
+        sf.write(
+            os.path.join("ensembled", f"{args.output_name}.wav"),
+            cmb_spectrogram_to_wave(ensembling(args.algorithm, specs), mp),
+            mp.param["sr"],
+        )
 
     if args.algorithm == "align":
         trackalignment = [
-            {
-                "file1": '"{}"'.format(args.input[0]),
-                "file2": '"{}"'.format(args.input[1]),
-            }
+            {"file1": f'"{args.input[0]}"', "file2": f'"{args.input[1]}"'}
         ]
 
         for i, e in tqdm(enumerate(trackalignment), desc="Performing Alignment..."):

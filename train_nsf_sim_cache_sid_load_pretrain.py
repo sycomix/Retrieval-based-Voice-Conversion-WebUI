@@ -191,7 +191,7 @@ def run(rank, n_gpus, hps):
         epoch_str = 1
         global_step = 0
         if rank == 0:
-            logger.info("loaded pretrained %s %s" % (hps.pretrainG, hps.pretrainD))
+            logger.info(f"loaded pretrained {hps.pretrainG} {hps.pretrainD}")
         print(
             net_g.module.load_state_dict(
                 torch.load(hps.pretrainG, map_location="cpu")["model"]

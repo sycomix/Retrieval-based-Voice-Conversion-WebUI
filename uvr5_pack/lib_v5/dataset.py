@@ -46,9 +46,7 @@ def make_pair(mix_dir, inst_dir):
         ]
     )
 
-    filelist = list(zip(X_list, y_list))
-
-    return filelist
+    return list(zip(X_list, y_list))
 
 
 def train_val_split(dataset_dir, split_mode, val_rate, val_filelist):
@@ -152,12 +150,10 @@ def make_training_set(filelist, cropsize, patches, sr, hop_length, n_fft, offset
 
 def make_validation_set(filelist, cropsize, sr, hop_length, n_fft, offset):
     patch_list = []
-    patch_dir = "cs{}_sr{}_hl{}_nf{}_of{}".format(
-        cropsize, sr, hop_length, n_fft, offset
-    )
+    patch_dir = f"cs{cropsize}_sr{sr}_hl{hop_length}_nf{n_fft}_of{offset}"
     os.makedirs(patch_dir, exist_ok=True)
 
-    for i, (X_path, y_path) in enumerate(tqdm(filelist)):
+    for X_path, y_path in tqdm(filelist):
         basename = os.path.splitext(os.path.basename(X_path))[0]
 
         X, y = spec_utils.cache_or_load(X_path, y_path, sr, hop_length, n_fft)
@@ -170,7 +166,7 @@ def make_validation_set(filelist, cropsize, sr, hop_length, n_fft, offset):
 
         len_dataset = int(np.ceil(X.shape[2] / roi_size))
         for j in range(len_dataset):
-            outpath = os.path.join(patch_dir, "{}_p{}.npz".format(basename, j))
+            outpath = os.path.join(patch_dir, f"{basename}_p{j}.npz")
             start = j * roi_size
             if not os.path.exists(outpath):
                 np.savez(

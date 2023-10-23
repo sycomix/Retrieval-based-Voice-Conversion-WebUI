@@ -2,6 +2,7 @@
 
 对源特征进行检索
 """
+
 import torch, pdb, os, parselmouth
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -32,7 +33,7 @@ from time import time as ttime
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_path = r"E:\codes\py39\vits_vc_gpu_train\hubert_base.pt"  #
-print("load model(s) from {}".format(model_path))
+print(f"load model(s) from {model_path}")
 models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task(
     [model_path],
     suffix="",
@@ -121,13 +122,13 @@ import faiss
 index = faiss.read_index("infer/added_IVF512_Flat_mi_baseline_src_feat.index")
 big_npy = np.load("infer/big_src_feature_mi.npy")
 ta0 = ta1 = ta2 = 0
+f0_up_key = -2  #
 for idx, name in enumerate(
     [
         "冬之花clip1.wav",
     ]
 ):  ##
-    wav_path = "todo-songs/%s" % name  #
-    f0_up_key = -2  #
+    wav_path = f"todo-songs/{name}"
     audio, sampling_rate = sf.read(wav_path)
     if len(audio.shape) > 1:
         audio = librosa.to_mono(audio.transpose(1, 0))
@@ -193,7 +194,7 @@ for idx, name in enumerate(
     # wavfile.write("ft-mi_1k-index256-noD-%s.wav"%name, 40000, audio)##
     # wavfile.write("ft-mi-freeze-vocoder-flow-enc_q_1k-%s.wav"%name, 40000, audio)##
     # wavfile.write("ft-mi-sim1k-%s.wav"%name, 40000, audio)##
-    wavfile.write("ft-mi-no_opt-no_dropout-%s.wav" % name, 40000, audio)  ##
+    wavfile.write(f"ft-mi-no_opt-no_dropout-{name}.wav", 40000, audio)
 
 
 print(ta0, ta1, ta2)  #
